@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cashmela SIP Planner</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Prop Types (Required for Recharts UMD) -->
+    <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+    
+    <!-- Recharts -->
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; overflow: hidden; }
+        /* Custom Scrollbar for internal containers */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 9999px;
+            background: #4f46e5;
+            cursor: pointer;
+            margin-top: -6px; 
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 4px;
+            background: #e2e8f0;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen w-screen flex flex-col">
+<div id="root" class="h-full w-full flex flex-col"></div>
+
+<script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+    const { 
+        PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, 
+        AreaChart, Area, XAxis, YAxis, CartesianGrid 
+    } = Recharts;
+
+    // --- Icons ---
+    const Icon = ({ path, color = "currentColor", className = "" }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+            {path}
+        </svg>
+    );
+
+    const Shield = (props) => <Icon {...props} path={<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />} />;
+    const Activity = (props) => <Icon {...props} path={<polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />} />;
+    const TrendingUp = (props) => <Icon {...props} path={<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></>} />;
+    const Zap = (props) => <Icon {...props} path={<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />} />;
+    const Award = (props) => <Icon {...props} path={<><circle cx="12" cy="8" r="7" /><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" /></>} />;
+    const Briefcase = (props) => <Icon {...props} path={<><rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></>} />;
+    const Wallet = (props) => <Icon {...props} path={<><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" /><path d="M4 6v12a2 2 0 0 0 2 2h14v-4" /><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z" /></>} />;
+    const CheckCircle = (props) => <Icon {...props} path={<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></>} />;
+    const Info = (props) => <Icon {...props} path={<><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></>} />;
+    const Lock = (props) => <Icon {...props} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>} />;
+    const Download = (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>} />;
+    const Share = (props) => <Icon {...props} path={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></>} />;
+
+    // --- UI Components ---
+    const Badge = ({ children, type = "neutral" }) => {
+        const styles = {
+            neutral: "bg-slate-100 text-slate-600 border-slate-200",
+            success: "bg-emerald-50 text-emerald-700 border-emerald-100",
+            warning: "bg-amber-50 text-amber-700 border-amber-100",
+            blue: "bg-blue-50 text-blue-700 border-blue-100"
+        };
+        return (
+            <span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold border ${styles[type] || styles.neutral}`}>
+                {children}
+            </span>
+        );
+    };
+
+    function InvestmentCalculator() {
+        // State
+        const [investmentType, setInvestmentType] = useState('sip'); 
+        const [amount, setAmount] = useState(15000);
+        const [riskProfile, setRiskProfile] = useState('moderate');
+        const [duration, setDuration] = useState(15);
+        const [allocation, setAllocation] = useState(null);
+        const [projection, setProjection] = useState([]);
+        const [activeTab, setActiveTab] = useState('overview');
+
+        // Advanced Controls
+        const [inflation, setInflation] = useState(0.06); 
+        const [showPostTax, setShowPostTax] = useState(false);
+        const [sipStepUp, setSipStepUp] = useState(0.0);
+        const [age, setAge] = useState(30);
+        const [scenario, setScenario] = useState('base');
+
+        // Lead Capture
+        const [lead, setLead] = useState({ name: "", mobile: "", email: "" });
+        const [leadError, setLeadError] = useState("");
+        const [isFormValid, setIsFormValid] = useState(false);
+
+        // Constants
+        const RETURN_RATES = { large: 0.13, multi: 0.16, small: 0.21 };
+        const COLORS = ['#3b82f6', '#10b981', '#f59e0b']; 
+
+        const RISK_MATRICES = {
+            conservative: { label: "Conservative", allocations: { large: 70, multi: 20, small: 10 }, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-200", icon: Shield },
+            moderate: { label: "Moderate", allocations: { large: 50, multi: 30, small: 20 }, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200", icon: Activity },
+            aggressive: { label: "Aggressive", allocations: { large: 30, multi: 30, small: 40 }, color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-200", icon: TrendingUp },
+            veryAggressive: { label: "High Octane", allocations: { large: 10, multi: 30, small: 60 }, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", icon: Zap }
+        };
+
+        const FUNDS_DB = {
+            large: [
+                { name: "ICICI Prudential Bluechip Fund", cagr: "15.2%", rating: 5, tag: "CONSISTENT" },
+                { name: "Nippon India Large Cap Fund", cagr: "16.1%", rating: 5, tag: "HIGH GROWTH" },
+                { name: "HDFC Top 100 Fund", cagr: "14.8%", rating: 4, tag: "VALUE" },
+                { name: "SBI Bluechip Fund", cagr: "14.5%", rating: 4, tag: "STABLE" },
+                { name: "Axis Bluechip Fund", cagr: "13.9%", rating: 3, tag: "LOW VOLATILITY" }
+            ],
+            multi: [
+                { name: "Parag Parikh Flexi Cap Fund", cagr: "19.8%", rating: 5, tag: "GLOBAL" },
+                { name: "Quant Active Fund", cagr: "21.2%", rating: 5, tag: "MOMENTUM" },
+                { name: "Nippon India Multi Cap Fund", cagr: "18.5%", rating: 4, tag: "DIVERSIFIED" },
+                { name: "Kotak Emerging Equity Fund", cagr: "18.1%", rating: 4, tag: "MID-BIAS" },
+                { name: "HDFC Flexi Cap Fund", cagr: "17.9%", rating: 4, tag: "VALUE" }
+            ],
+            small: [
+                { name: "Quant Small Cap Fund", cagr: "28.5%", rating: 5, tag: "HIGH ALPHA" },
+                { name: "Nippon India Small Cap Fund", cagr: "25.5%", rating: 5, tag: "CATEGORY LEADER" },
+                { name: "HDFC Small Cap Fund", cagr: "22.4%", rating: 4, tag: "DEFENSIVE" },
+                { name: "SBI Small Cap Fund", cagr: "21.0%", rating: 4, tag: "CONSISTENT" },
+                { name: "Axis Small Cap Fund", cagr: "20.5%", rating: 4, tag: "QUALITY" }
+            ]
+        };
+
+        // Helpers
+        const formatCurrency = (val) => {
+            if (!val || isNaN(val)) return "₹0";
+            if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)}Cr`;
+            if (val >= 100000) return `₹${(val / 100000).toFixed(2)}L`;
+            return `₹${Math.round(val).toLocaleString('en-IN')}`;
+        };
+
+        // Effects
+        useEffect(() => {
+            const isValidName = lead.name.trim().length > 0;
+            const digits = lead.mobile.replace(/\D/g, "");
+            const isValidMobile = digits.length === 10; // Changed to exactly 10 digits
+            const isValidEmail = lead.email.trim().length > 0 && lead.email.includes("@");
+            setIsFormValid(isValidName && isValidMobile && isValidEmail);
+        }, [lead]);
+
+        useEffect(() => {
+            const profile = RISK_MATRICES[riskProfile];
+            const alloc = profile.allocations;
+            const safeAmount = amount === '' ? 0 : Number(amount);
+            
+            // Calculate Base Return
+            const baseReturn = (alloc.large * RETURN_RATES.large + alloc.multi * RETURN_RATES.multi + alloc.small * RETURN_RATES.small) / 100;
+            
+            // Adjust for Scenario
+            let scenarioBump = 0;
+            if (scenario === 'bull') scenarioBump = 0.02;
+            if (scenario === 'bear') scenarioBump = -0.02;
+            
+            const effectiveReturn = Math.max(baseReturn + scenarioBump, 0.02); 
+            const monthlyRate = effectiveReturn / 12;
+
+            const data = [];
+            let corpus = 0;
+            let invested = 0;
+            let currentSip = safeAmount;
+
+            for (let year = 0; year <= 30; year++) {
+                if (year === 0) {
+                     data.push({ year, amount: investmentType === 'lumpsum' ? safeAmount : 0, invested: investmentType === 'lumpsum' ? safeAmount : 0 });
+                     if (investmentType === 'lumpsum') {
+                         corpus = safeAmount;
+                         invested = safeAmount;
+                     }
+                } else {
+                    if (investmentType === 'lumpsum') {
+                        corpus = corpus * (1 + effectiveReturn);
+                    } else {
+                        // Monthly compounding for this year
+                        for (let m = 0; m < 12; m++) {
+                            corpus = (corpus + currentSip) * (1 + monthlyRate);
+                            invested += currentSip;
+                        }
+                        currentSip = currentSip * (1 + sipStepUp);
+                    }
+                     data.push({ year, amount: Math.round(corpus), invested: Math.round(invested) });
+                }
+            }
+
+            const resultData = data[duration] || { amount: 0, invested: 0 };
+            const nominal = resultData.amount;
+            const totalInvested = resultData.invested;
+            const totalReturn = nominal - totalInvested;
+            const inflationFactor = Math.pow(1 + inflation, duration);
+            const realValue = inflationFactor > 0 ? nominal / inflationFactor : nominal;
+            const postTaxValue = totalInvested + totalReturn * 0.9;
+
+            setAllocation({
+                ...profile,
+                allocations: alloc,
+                baseCagr: (baseReturn * 100).toFixed(1),
+                effectiveCagr: (effectiveReturn * 100).toFixed(1),
+                totalReturn,
+                finalValueNominal: nominal,
+                finalValueReal: realValue,
+                finalValuePostTax: postTaxValue,
+                investedAmount: totalInvested
+            });
+            setProjection(data);
+        }, [amount, riskProfile, duration, investmentType, sipStepUp, scenario, inflation]);
+
+        const handleDownloadPDF = () => {
+            if (!allocation) return;
+            if (!isFormValid) {
+                 alert("Please fill in Name, Mobile and Email to download.");
+                 return;
+            }
+
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+
+                // --- 0. Watermark (Background) ---
+                doc.setTextColor(245, 247, 250); // Very light gray for watermark
+                doc.setFontSize(60);
+                doc.setFont("helvetica", "bold");
+                // Rotate 45 degrees around the approximate center
+                doc.text("cashmela.com", 105, 148, { align: 'center', angle: 45 });
+
+                // Helper to format currency for PDF
+                const fmt = (val) => "Rs. " + Math.round(val).toLocaleString('en-IN');
+
+                // 1. Header
+                doc.setFillColor(79, 70, 229); // Indigo 600
+                doc.rect(0, 0, 210, 40, 'F');
+                
+                doc.setTextColor(255, 255, 255);
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(22);
+                doc.text("Cashmela SIP Planner", 15, 20);
+                
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "normal");
+                doc.text("AI-Powered Wealth Strategy Report", 15, 28);
+                doc.text(`Date: ${new Date().toLocaleDateString()}`, 150, 28);
+
+                // 2. Client Details (Box)
+                doc.setDrawColor(200, 200, 200);
+                doc.setFillColor(255, 255, 255);
+                doc.roundedRect(15, 50, 180, 30, 3, 3, 'S');
+                
+                doc.setTextColor(51, 65, 85); // Slate 700
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "bold");
+                doc.text("Client Details", 20, 60);
+
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "normal");
+                // ROW 1: Name and Mobile
+                doc.text(`Name: ${lead.name}`, 20, 70);
+                doc.text(`Mobile: ${lead.mobile}`, 110, 70);
+                // ROW 2: Email (Added as requested)
+                doc.text(`Email: ${lead.email}`, 20, 77);
+
+                // 3. Strategy Summary
+                let yPos = 100;
+                doc.setFontSize(14);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(79, 70, 229);
+                doc.text("Investment Configuration", 15, yPos);
+                
+                yPos += 10;
+                doc.setFontSize(10);
+                doc.setTextColor(51, 65, 85);
+                
+                const config = [
+                    ["Profile", `${riskProfile.charAt(0).toUpperCase() + riskProfile.slice(1)} (${age} Yrs)`],
+                    ["Mode", investmentType === 'sip' ? 'Monthly SIP' : 'Lumpsum Investment'],
+                    ["Investment", fmt(amount)],
+                    ["Duration", `${duration} Years`],
+                    ["Step-up", `${(sipStepUp * 100).toFixed(0)}% Annual Increase`],
+                    ["Exp. CAGR", `${allocation.effectiveCagr}% (${scenario} scenario)`]
+                ];
+
+                config.forEach((item, i) => {
+                    doc.setFont("helvetica", "bold");
+                    doc.text(item[0], 20, yPos + (i * 7));
+                    doc.setFont("helvetica", "normal");
+                    doc.text(": " + item[1], 50, yPos + (i * 7));
+                });
+
+                // 4. Financial Projections (Highlight Box)
+                yPos += 55;
+                doc.setFillColor(241, 245, 249); // Slate 100
+                doc.roundedRect(15, yPos, 180, 30, 3, 3, 'F');
+                
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(11);
+                doc.text("Projected Corpus", 25, yPos + 10);
+                doc.text("Total Invested", 110, yPos + 10);
+                
+                doc.setFontSize(16);
+                doc.setTextColor(79, 70, 229); // Indigo
+                doc.text(fmt(allocation.finalValueNominal), 25, yPos + 22);
+                
+                doc.setTextColor(51, 65, 85);
+                doc.text(fmt(allocation.investedAmount), 110, yPos + 22);
+
+                // 5. Allocation Breakdown
+                yPos += 45;
+                doc.setFontSize(14);
+                doc.setTextColor(79, 70, 229);
+                doc.text("Asset Allocation", 15, yPos);
+
+                yPos += 10;
+                doc.setFontSize(10);
+                doc.setTextColor(51, 65, 85);
+                
+                const allocs = [
+                    { l: "Large Cap", v: allocation.allocations.large, c: [59, 130, 246] },
+                    { l: "Flexi / Multi Cap", v: allocation.allocations.multi, c: [16, 185, 129] },
+                    { l: "Small Cap", v: allocation.allocations.small, c: [245, 158, 11] }
+                ];
+
+                // Draw Simple Bar
+                let xBar = 20;
+                allocs.forEach(a => {
+                    if (a.v > 0) {
+                        const w = (a.v / 100) * 170;
+                        doc.setFillColor(...a.c);
+                        doc.rect(xBar, yPos, w, 8, 'F');
+                        xBar += w;
+                    }
+                });
+
+                // Legend
+                yPos += 15;
+                let xLeg = 20;
+                allocs.forEach(a => {
+                    if (a.v > 0) {
+                        doc.setFillColor(...a.c);
+                        doc.rect(xLeg, yPos, 4, 4, 'F');
+                        doc.text(`${a.l} (${a.v}%)`, xLeg + 6, yPos + 3);
+                        xLeg += 55;
+                    }
+                });
+
+                // 6. Footer Disclaimer
+                yPos = 280;
+                doc.setFontSize(8);
+                doc.setTextColor(150, 150, 150);
+                doc.text("Disclaimer: Illustrated returns are based on historical market trends and not guaranteed.", 15, yPos);
+                doc.text("This report is generated by Cashmela AI Planner for educational purposes.", 15, yPos + 5);
+
+                // --- 7. Branding at Bottom ---
+                doc.setFontSize(10);
+                doc.setTextColor(79, 70, 229); // Indigo 600
+                doc.text("www.cashmela.com", 105, 292, { align: 'center' });
+
+                doc.save(`Cashmela_Plan_${lead.name.replace(/\s+/g,'_')}.pdf`);
+
+            } catch (err) {
+                console.error(err);
+                alert("Error generating PDF. Please try again.");
+            }
+        };
+        
+        const handleWhatsAppShare = () => {
+             if (!isFormValid) return;
+             window.open(`https://wa.me/?text=My%20Wealth%20Plan:%20${formatCurrency(allocation.finalValueNominal)}`, "_blank");
+        };
+
+        const displayCorpus = showPostTax ? allocation?.finalValuePostTax : allocation?.finalValueNominal;
+
+        return (
+            <div className="flex flex-col h-screen bg-slate-50 text-slate-800 overflow-hidden font-sans">
+                
+                {/* --- HEADER (Tools) --- */}
+                <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-20 shadow-sm">
+                    <div className="flex items-center gap-2">
+                         <div className="bg-indigo-600 p-1.5 rounded-lg">
+                            <Award className="w-5 h-5 text-white" />
+                        </div>
+                        {/* Compact Brand for Mobile */}
+                        <h1 className="text-lg font-bold text-slate-800 tracking-tight">Cashmela <span className="text-indigo-600 hidden md:inline">SIP Planner</span></h1>
+                    </div>
+                    
+                    {/* Global Settings Toolbar */}
+                    <div className="flex items-center gap-4">
+                        {/* Scenario Toggles */}
+                        <div className="hidden md:flex bg-slate-100 rounded-lg p-1 gap-1">
+                            {['bear', 'base', 'bull'].map(s => (
+                                <button key={s} onClick={() => setScenario(s)} 
+                                    className={`px-3 py-1 rounded-md text-xs font-semibold capitalize transition-all ${scenario === s ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                                    {s} {s==='bull' && '+2%'} {s==='bear' && '-2%'}
+                                </button>
+                            ))}
+                        </div>
+                        
+                        <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
+
+                        {/* Inflation & Tax */}
+                        <div className="flex items-center gap-3 text-xs font-medium text-slate-600">
+                           <div className="flex items-center gap-2" title="Adjust Inflation">
+                                <span className="hidden sm:inline">Inflation: {(inflation * 100).toFixed(1)}%</span>
+                                <span className="sm:hidden">Inf: {(inflation * 100).toFixed(1)}%</span>
+                                <input type="range" min="0.03" max="0.08" step="0.005" value={inflation} onChange={(e)=>setInflation(parseFloat(e.target.value))} className="w-16 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                           </div>
+                           <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input type="checkbox" checked={showPostTax} onChange={(e) => setShowPostTax(e.target.checked)} className="hidden" />
+                                <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${showPostTax ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                                    <div className={`bg-white w-3 h-3 rounded-full shadow-sm transform transition-transform ${showPostTax ? 'translate-x-4' : ''}`}></div>
+                                </div>
+                                <span className="hidden sm:inline">{showPostTax ? 'Post-Tax' : 'Pre-Tax'}</span>
+                           </label>
+                        </div>
+                    </div>
+                </header>
+
+                <div className="flex flex-1 overflow-hidden">
+                    
+                    {/* --- LEFT SIDEBAR (INPUTS) --- */}
+                    <aside className="w-[300px] bg-white border-r border-slate-200 flex flex-col shrink-0 z-10 overflow-y-auto custom-scrollbar">
+                        <div className="p-4 space-y-5">
+                            
+                            {/* Strategy Mode */}
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Investment Mode</label>
+                                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                                    {['sip', 'lumpsum'].map(type => (
+                                        <button key={type} onClick={() => setInvestmentType(type)}
+                                            className={`py-2 rounded-lg text-xs font-bold capitalize transition-all ${investmentType === type ? 'bg-white text-indigo-600 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}>
+                                            {type}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Amount */}
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                                    {investmentType === 'sip' ? 'Monthly Investment' : 'Total Capital'}
+                                </label>
+                                <div className="relative mb-2">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                                    <input type="number" value={amount} onChange={(e) => setAmount(Number(e.target.value))} 
+                                        className="w-full pl-7 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 outline-none font-bold text-slate-700" />
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {(investmentType === 'lumpsum' ? [100000, 500000, 2500000] : [5000, 10000, 25000]).map(val => (
+                                        <button key={val} onClick={() => setAmount(val)} 
+                                            className="px-2 py-1 rounded bg-slate-50 border border-slate-200 text-[10px] font-semibold text-slate-600 hover:border-indigo-300 transition">
+                                            {val >= 100000 ? (val/100000)+'L' : (val/1000)+'k'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Step Up */}
+                            {investmentType === 'sip' && (
+                                <div>
+                                    <div className="flex justify-between mb-2">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Yearly Step-up</label>
+                                        <span className="text-[10px] font-bold text-indigo-600">{(sipStepUp*100).toFixed(0)}%</span>
+                                    </div>
+                                    <div className="grid grid-cols-4 gap-1">
+                                        {[0, 0.05, 0.10, 0.15].map(r => (
+                                            <button key={r} onClick={() => setSipStepUp(r)} 
+                                                className={`py-1.5 rounded border text-[10px] font-bold transition-colors ${sipStepUp === r ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-500'}`}>
+                                                {r*100}%
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Duration & Age */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Period: <span className="text-indigo-600">{duration}Y</span></label>
+                                    <input type="range" min="3" max="35" value={duration} onChange={(e) => setDuration(Number(e.target.value))} 
+                                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Age: <span className="text-indigo-600">{age}</span></label>
+                                    <input type="number" min="18" max="80" value={age} onChange={(e) => setAge(Number(e.target.value))} 
+                                        className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-indigo-500" />
+                                </div>
+                            </div>
+
+                            {/* Risk Profile */}
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Risk Profile</label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {Object.entries(RISK_MATRICES).map(([key, profile]) => {
+                                        const IconCmp = profile.icon;
+                                        const active = riskProfile === key;
+                                        return (
+                                            <button key={key} onClick={() => setRiskProfile(key)} 
+                                                className={`flex items-center gap-3 p-2 rounded-xl border text-left transition-all ${active ? `bg-white ${profile.border} shadow-md ring-1 ring-indigo-50` : 'bg-slate-50 border-transparent hover:bg-white hover:border-slate-200'}`}>
+                                                <div className={`p-1.5 rounded-lg ${profile.bg} shrink-0`}>
+                                                    <IconCmp className={`w-4 h-4 ${profile.color}`} />
+                                                </div>
+                                                <div>
+                                                    <div className={`text-xs font-bold ${active ? 'text-slate-800' : 'text-slate-500'}`}>{profile.label}</div>
+                                                    {active && <div className="text-[9px] text-slate-400 leading-tight mt-0.5">Exp. CAGR: {allocation?.baseCagr}%</div>}
+                                                </div>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* AI Insight Box */}
+                             <div className="bg-indigo-900 rounded-xl p-5 text-white relative overflow-hidden shadow-sm border border-indigo-800">
+                                <div className="absolute top-0 right-0 p-3 opacity-10 pointer-events-none">
+                                    <Zap className="w-24 h-24" />
+                                </div>
+                                <div className="relative z-10">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <span className="bg-indigo-800 text-yellow-300 text-[10px] font-bold px-2 py-0.5 rounded border border-yellow-500/50 shadow-sm animate-pulse">
+                                            AI INSIGHT 2.0
+                                        </span>
+                                    </div>
+                                    <p className="text-indigo-100 text-xs leading-relaxed mb-3">
+                                        For your <strong className="text-white text-sm underline decoration-yellow-400/50">{RISK_MATRICES[riskProfile].label}</strong> profile, 
+                                        current configuration targets an effective CAGR of{" "}
+                                        <strong className="text-yellow-300 text-sm">
+                                            {allocation?.effectiveCagr || '--'}%
+                                        </strong>{" "}
+                                        under the selected <span className="font-semibold">{scenario === 'base' ? 'Base case' : scenario === 'bull' ? 'Bull case (+2%)' : 'Bear case (-2%)'}</span> scenario.
+                                    </p>
+                                    <p className="text-[10px] text-indigo-200 mb-3 leading-relaxed">
+                                        We also model{" "}
+                                        <span className="font-semibold text-white">
+                                            {(inflation * 100).toFixed(1)}% inflation
+                                        </span>{" "}
+                                        to highlight real (today’s value) wealth creation. Toggle post-tax view to estimate 
+                                        indicative equity LTCG impact.
+                                    </p>
+                                    <div className="flex flex-col gap-1.5 text-[10px] font-medium text-indigo-300">
+                                        <div className="flex items-center gap-2">
+                                            <CheckCircle className="w-3 h-3 text-emerald-400" />
+                                            <span>Scenario-based projections</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <CheckCircle className="w-3 h-3 text-emerald-400" />
+                                            <span>Inflation-aware view</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* --- MAIN DASHBOARD AREA --- */}
+                    <main className="flex-1 flex flex-col min-w-0 bg-slate-50/50">
+                        
+                        {/* --- HERO SECTION (NEW) --- */}
+                        <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-blue-900 text-white p-5 shrink-0 shadow-md">
+                            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-bold text-yellow-300 backdrop-blur-sm border border-white/10 tracking-wide">
+                                            AI-POWERED WEALTH ENGINE 2.0
+                                        </div>
+                                    </div>
+                                    <h2 className="text-xl md:text-2xl font-bold tracking-tight">Cashmela SIP Planner</h2>
+                                    <p className="text-xs md:text-sm text-indigo-100 max-w-3xl leading-relaxed opacity-90">
+                                        Construct an institutional-grade portfolio tailored to your risk, age, and time horizon. 
+                                        Powered by long-term Indian market data, scenario analysis, inflation awareness, and post-tax estimates.
+                                    </p>
+                                </div>
+                                <div className="hidden md:block opacity-20 self-center">
+                                     <Award className="w-16 h-16 text-white" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 1. Stats Row */}
+                        <div className="p-4 grid grid-cols-3 gap-4 shrink-0">
+                            {/* Invested */}
+                            <div className="bg-white p-3 md:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Principal</p>
+                                        <p className="text-lg md:text-xl font-bold text-slate-800 mt-1">{formatCurrency(allocation?.investedAmount)}</p>
+                                    </div>
+                                    <div className="p-1.5 md:p-2 bg-slate-50 rounded-lg"><Wallet className="w-4 h-4 text-slate-400"/></div>
+                                </div>
+                            </div>
+                            {/* Gains */}
+                            <div className="bg-white p-3 md:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <p className="text-[10px] font-bold text-emerald-600/70 uppercase">Total Gains</p>
+                                        <p className="text-lg md:text-xl font-bold text-emerald-600 mt-1">+{formatCurrency(allocation?.totalReturn)}</p>
+                                    </div>
+                                    <div className="p-1.5 md:p-2 bg-emerald-50 rounded-lg"><TrendingUp className="w-4 h-4 text-emerald-500"/></div>
+                                </div>
+                            </div>
+                            {/* Corpus */}
+                            <div className="bg-white p-3 md:p-4 rounded-xl border border-indigo-100 shadow-sm relative overflow-hidden flex flex-col justify-between">
+                                <div className="absolute right-0 top-0 w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 opacity-10 rounded-bl-full"></div>
+                                <div className="flex justify-between items-start relative z-10">
+                                    <div>
+                                        <p className="text-[10px] font-bold text-indigo-600/70 uppercase">Proj. Corpus</p>
+                                        <p className="text-xl md:text-2xl font-bold text-indigo-700 mt-0.5">{formatCurrency(displayCorpus)}</p>
+                                        <p className="text-[10px] text-slate-400 mt-1 truncate">
+                                            Real: {formatCurrency(allocation?.finalValueReal)}
+                                        </p>
+                                    </div>
+                                    <div className="p-1.5 md:p-2 bg-indigo-50 rounded-lg"><Award className="w-4 h-4 text-indigo-500"/></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. Visualizer (Charts) - Flexible Height */}
+                        <div className="flex-1 px-4 pb-0 min-h-0 flex flex-col">
+                            <div className="bg-white border border-slate-200 rounded-t-xl shadow-sm flex flex-col h-full overflow-hidden">
+                                {/* Tabs */}
+                                <div className="flex items-center border-b border-slate-100 px-2 shrink-0">
+                                    {['overview', 'growth', 'funds'].map(tab => (
+                                        <button key={tab} onClick={() => setActiveTab(tab)}
+                                            className={`px-4 py-3 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors ${activeTab === tab ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                                            {tab === 'overview' ? 'Allocation' : tab === 'growth' ? 'Growth Curve' : 'Recommended Funds'}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Content Area */}
+                                <div className="flex-1 overflow-hidden relative p-4">
+                                    {activeTab === 'overview' && allocation && (
+                                        <div className="flex h-full items-center justify-around gap-4 md:gap-8">
+                                            <div className="h-full aspect-square max-h-[220px] md:max-h-[280px] relative">
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <PieChart>
+                                                        <Pie data={[
+                                                            { name: 'Large Cap', value: allocation.allocations.large },
+                                                            { name: 'Multi Cap', value: allocation.allocations.multi },
+                                                            { name: 'Small Cap', value: allocation.allocations.small },
+                                                        ]} innerRadius="60%" outerRadius="80%" paddingAngle={5} dataKey="value" cornerRadius={4}>
+                                                            {COLORS.map((color, index) => <Cell key={`cell-${index}`} fill={color} strokeWidth={0} />)}
+                                                        </Pie>
+                                                        <Tooltip />
+                                                    </PieChart>
+                                                </ResponsiveContainer>
+                                                <div className="absolute inset-0 flex items-center justify-center flex-col pointer-events-none">
+                                                    <span className="text-xl md:text-2xl font-bold text-slate-700">{allocation.effectiveCagr}%</span>
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase">CAGR</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col gap-2 md:gap-3 min-w-[160px] md:min-w-[200px]">
+                                                {['large', 'multi', 'small'].map((type, i) => (
+                                                    <div key={type} className="flex items-center justify-between p-2 md:p-3 rounded-lg bg-slate-50 border border-slate-100">
+                                                        <div className="flex items-center gap-2 md:gap-3">
+                                                            <div className={`w-1.5 md:w-2 h-8 rounded-full`} style={{backgroundColor: COLORS[i]}}></div>
+                                                            <div>
+                                                                <div className="text-xs font-bold text-slate-700 capitalize">{type} Cap</div>
+                                                                <div className="text-[10px] text-slate-400">{allocation.allocations[type]}% Alloc</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-xs font-bold text-slate-600">
+                                                            {formatCurrency((allocation.investedAmount || amount) * (allocation.allocations[type]/100))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'growth' && (
+                                        <div className="w-full h-full pb-4 pr-2">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <AreaChart data={projection.filter((_, i) => i <= duration)} margin={{top:10, right:10, left:-20, bottom:0}}>
+                                                    <defs>
+                                                        <linearGradient id="colorAmt" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                                                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                    <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{fill:'#94a3b8', fontSize:10}} dy={5} />
+                                                    <YAxis axisLine={false} tickLine={false} tick={{fill:'#94a3b8', fontSize:10}} tickFormatter={(val)=> val>=100000 ? (val/100000).toFixed(0)+'L' : (val/1000).toFixed(0)+'k'} />
+                                                    <Tooltip contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}} formatter={(val)=>[formatCurrency(val)]}/>
+                                                    <Area type="monotone" dataKey="amount" stroke="#4f46e5" strokeWidth={2} fill="url(#colorAmt)" activeDot={{r: 6}} />
+                                                    <Area type="monotone" dataKey="invested" stroke="#cbd5e1" strokeWidth={2} strokeDasharray="4 4" fill="transparent" />
+                                                </AreaChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'funds' && (
+                                        <div className="flex flex-col h-full overflow-hidden px-1">
+                                            {/* Disclaimer Note */}
+                                            <div className="shrink-0 bg-[#fffbeb] border border-[#fef3c7] p-3 rounded-xl flex gap-3 text-[#92400e] text-xs mb-4">
+                                                <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                                <p className="leading-relaxed">
+                                                    Suggested schemes are illustrative, based on 4–5 star ratings, meaningful AUM, and 
+                                                    consistency of returns. This is not a SEBI-registered recommendation. Use the percentage 
+                                                    allocation as a guideline, and connect with an advisor for implementation.
+                                                </p>
+                                            </div>
+
+                                            {/* Parallel Columns Container */}
+                                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-2">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
+                                                    
+                                                    {/* Column 1: Large Cap */}
+                                                    {allocation.allocations.large > 0 && (
+                                                        <div className="flex flex-col gap-3">
+                                                            <div className="sticky top-0 bg-slate-50/95 backdrop-blur-sm z-10 pb-2 border-b border-slate-200">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">
+                                                                        {allocation.allocations.large}%
+                                                                    </span>
+                                                                    <h3 className="font-bold text-slate-800">Large Cap</h3>
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-3">
+                                                                {FUNDS_DB.large.map((fund, i) => (
+                                                                    <div key={fund.name} className="p-4 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md hover:border-blue-200 transition-all group">
+                                                                        <div className="flex justify-between items-start mb-3">
+                                                                            <Badge type="blue">{fund.tag}</Badge>
+                                                                            <div className="flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                                                                <span className="text-xs font-bold text-slate-600">{fund.rating}</span>
+                                                                                <span className="text-yellow-400 text-xs">★</span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="font-bold text-slate-800 text-sm mb-4 leading-snug group-hover:text-blue-700 transition-colors">
+                                                                            {fund.name}
+                                                                        </div>
+                                                                        <div className="flex justify-between items-end border-t border-slate-50 pt-3">
+                                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">3Y Returns</span>
+                                                                            <span className="text-lg font-bold text-emerald-600">{fund.cagr}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Column 2: Multi Cap */}
+                                                    {allocation.allocations.multi > 0 && (
+                                                        <div className="flex flex-col gap-3">
+                                                            <div className="sticky top-0 bg-slate-50/95 backdrop-blur-sm z-10 pb-2 border-b border-slate-200">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded">
+                                                                        {allocation.allocations.multi}%
+                                                                    </span>
+                                                                    <h3 className="font-bold text-slate-800">Flexi / Multi Cap</h3>
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-3">
+                                                                {FUNDS_DB.multi.map((fund, i) => (
+                                                                    <div key={fund.name} className="p-4 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md hover:border-emerald-200 transition-all group">
+                                                                        <div className="flex justify-between items-start mb-3">
+                                                                            <Badge type="success">{fund.tag}</Badge>
+                                                                            <div className="flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                                                                <span className="text-xs font-bold text-slate-600">{fund.rating}</span>
+                                                                                <span className="text-yellow-400 text-xs">★</span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="font-bold text-slate-800 text-sm mb-4 leading-snug group-hover:text-emerald-700 transition-colors">
+                                                                            {fund.name}
+                                                                        </div>
+                                                                        <div className="flex justify-between items-end border-t border-slate-50 pt-3">
+                                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">3Y Returns</span>
+                                                                            <span className="text-lg font-bold text-emerald-600">{fund.cagr}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Column 3: Small Cap */}
+                                                    {allocation.allocations.small > 0 && (
+                                                        <div className="flex flex-col gap-3">
+                                                            <div className="sticky top-0 bg-slate-50/95 backdrop-blur-sm z-10 pb-2 border-b border-slate-200">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-1 rounded">
+                                                                        {allocation.allocations.small}%
+                                                                    </span>
+                                                                    <h3 className="font-bold text-slate-800">Small Cap</h3>
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-3">
+                                                                {FUNDS_DB.small.map((fund, i) => (
+                                                                    <div key={fund.name} className="p-4 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md hover:border-amber-200 transition-all group">
+                                                                        <div className="flex justify-between items-start mb-3">
+                                                                            <Badge type="warning">{fund.tag}</Badge>
+                                                                            <div className="flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                                                                <span className="text-xs font-bold text-slate-600">{fund.rating}</span>
+                                                                                <span className="text-yellow-400 text-xs">★</span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="font-bold text-slate-800 text-sm mb-4 leading-snug group-hover:text-amber-700 transition-colors">
+                                                                            {fund.name}
+                                                                        </div>
+                                                                        <div className="flex justify-between items-end border-t border-slate-50 pt-3">
+                                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">3Y Returns</span>
+                                                                            <span className="text-lg font-bold text-emerald-600">{fund.cagr}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 3. Footer / Lead Capture Row */}
+                        <div className="p-4 pt-2 bg-slate-50 shrink-0">
+                             <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col lg:flex-row items-center gap-4 shadow-sm">
+                                <div className="flex-1 flex items-center gap-3 w-full">
+                                    <div className="bg-indigo-50 p-2 rounded-lg hidden md:block"><Lock className="w-4 h-4 text-indigo-600"/></div>
+                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2 w-full">
+                                        <input type="text" placeholder="Name" value={lead.name} onChange={e=>setLead({...lead, name:e.target.value})} className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-500" />
+                                        <input 
+                                            type="tel" 
+                                            placeholder="Mobile (10 digits)" 
+                                            value={lead.mobile} 
+                                            maxLength={10}
+                                            onChange={(e) => {
+                                                const val = e.target.value.replace(/\D/g, '');
+                                                setLead({...lead, mobile: val});
+                                            }}
+                                            className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-500" 
+                                        />
+                                        <input type="email" placeholder="Email" value={lead.email} onChange={e=>setLead({...lead, email:e.target.value})} className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-xs outline-none focus:border-indigo-500" />
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 w-full lg:w-auto">
+                                    <button onClick={handleDownloadPDF} disabled={!isFormValid} className={`flex-1 lg:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${isFormValid ? 'bg-slate-800 text-white hover:bg-black shadow-md' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                                        <Download className="w-3.5 h-3.5" /> PDF
+                                    </button>
+                                    <button onClick={handleWhatsAppShare} disabled={!isFormValid} className={`flex-1 lg:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${isFormValid ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-md' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                                        <Share className="w-3.5 h-3.5" /> WhatsApp
+                                    </button>
+                                </div>
+                             </div>
+                             <div className="text-[9px] text-center text-slate-400 mt-2">
+                                Illustrative only. Past performance ≠ future results. Not SEBI registered advice.
+                             </div>
+                        </div>
+
+                    </main>
+                </div>
+            </div>
+        );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<InvestmentCalculator />);
+</script>
+</body>
+</html>

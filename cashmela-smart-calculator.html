@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CashMela - Smart Financial Dashboard</title>
+    <meta name="description" content="State-of-the-art digital finance solutions in a single-screen dashboard.">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Chart.js for Calculator -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- jsPDF for PDF Download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f4ff', 100: '#e0eaff', 200: '#c7d9ff', 300: '#9ecaff', 400: '#5da4ff', 500: '#2b80ff', // Vivid Blue
+                            600: '#005be6', 700: '#0047b3', 800: '#003a8f', 900: '#003175',
+                        },
+                    },
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Base Glassmorphism Background & Layout */
+        body { 
+            background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); 
+            height: 100vh; 
+            overflow: hidden; 
+            font-size: 14px; 
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 0;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Range Slider Styling */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #e2e8f0; border-radius: 999px; }
+        input[type=range]::-webkit-slider-thumb { height: 16px; width: 16px; border-radius: 50%; background: #2b80ff; cursor: pointer; -webkit-appearance: none; margin-top: -6px; box-shadow: 0 2px 6px rgba(43, 128, 255, 0.4); border: 2px solid white; }
+
+        @media (max-width: 1023px) {
+            body { height: auto; overflow-y: auto; }
+            .dashboard-container { padding: 1rem; }
+            .dashboard-grid { grid-template-columns: 1fr; }
+            main { height: auto !important; overflow: visible !important; }
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased">
+    
+    <div class="dashboard-container p-4">
+
+        <!-- Header Section -->
+        <div class="flex flex-col md:flex-row items-center mb-4 p-2 bg-white/70 backdrop-blur-md rounded-xl shadow-md z-10 gap-4">
+            <div class="md:w-1/4 px-2 text-center md:text-left">
+                <h1 class="text-xl font-extrabold text-slate-900 tracking-tight">Smart Financial Dashboard</h1>
+                <p class="text-xs text-slate-500 font-medium">Real-time Loan Analysis & Optimization</p>
+            </div>
+            
+            <!-- Tab Switcher (Centered and Filling Middle Space) -->
+            <div class="flex-grow flex justify-center w-full max-w-full">
+                <div class="flex gap-1 p-1 bg-gray-200/50 rounded-lg w-full max-w-2xl">
+                    <button onclick="switchCalcMode('emi')" id="calc-tab-emi" class="flex-1 py-1.5 px-4 rounded-md text-xs font-bold transition-all bg-white text-brand-600 shadow-sm whitespace-nowrap">EMI Calculator</button>
+                    <button onclick="switchCalcMode('bt')" id="calc-tab-bt" class="flex-1 py-1.5 px-4 rounded-md text-xs font-bold transition-all text-gray-500 hover:text-gray-700 hover:bg-gray-50 whitespace-nowrap">Balance Transfer</button>
+                    <button onclick="switchCalcMode('prepay')" id="calc-tab-prepay" class="flex-1 py-1.5 px-4 rounded-md text-xs font-bold transition-all text-gray-500 hover:text-gray-700 hover:bg-gray-50 whitespace-nowrap">Pre-Payment</button>
+                </div>
+            </div>
+
+            <!-- Empty Spacer to maintain center alignment of tabs -->
+            <div class="md:w-1/4 hidden md:block"></div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="flex-grow dashboard-grid grid grid-cols-12 md:gap-4 h-full overflow-hidden">
+            
+            <!-- COLUMN 1: INPUT SLIDERS -->
+            <div class="col-span-12 md:col-span-3 bg-white p-5 rounded-2xl shadow-xl flex flex-col overflow-hidden">
+                <span class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Loan Parameters</span>
+                
+                <!-- Loan Type Selector -->
+                <div class="flex gap-2 mb-6">
+                     <label class="cursor-pointer group flex-1">
+                        <input type="radio" name="calcLoanType" value="personal" class="peer hidden" checked onclick="handleCalcLoanTypeChange('personal')">
+                        <div class="w-full text-center py-2 rounded-xl border border-gray-200 bg-white text-[10px] font-bold shadow-sm peer-checked:bg-brand-600 peer-checked:text-white peer-checked:border-brand-600 transition">
+                            <i class="fas fa-user mr-1"></i> Personal
+                        </div>
+                    </label>
+                    <label class="cursor-pointer group flex-1">
+                        <input type="radio" name="calcLoanType" value="home" class="peer hidden" onclick="handleCalcLoanTypeChange('home')">
+                        <div class="w-full text-center py-2 rounded-xl border border-gray-200 bg-white text-[10px] font-bold shadow-sm peer-checked:bg-brand-600 peer-checked:text-white peer-checked:border-brand-600 transition">
+                            <i class="fas fa-home mr-1"></i> Home
+                        </div>
+                    </label>
+                    <label class="cursor-pointer group flex-1">
+                        <input type="radio" name="calcLoanType" value="business" class="peer hidden" onclick="handleCalcLoanTypeChange('business')">
+                        <div class="w-full text-center py-2 rounded-xl border border-gray-200 bg-white text-[10px] font-bold shadow-sm peer-checked:bg-brand-600 peer-checked:text-white peer-checked:border-brand-600 transition">
+                            <i class="fas fa-briefcase mr-1"></i> Business
+                        </div>
+                    </label>
+                </div>
+                
+                <div id="calc-input-container" class="space-y-6 flex-grow overflow-y-auto pr-2 custom-scrollbar">
+                    <!-- Dynamic Inputs injected here -->
+                </div>
+
+                <button onclick="calculate()" id="calculate-btn" class="mt-4 w-full bg-slate-900 hover:bg-black text-white font-bold py-3 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 text-sm">
+                    <span id="calculate-btn-text">Calculate</span> <i class="fas fa-arrow-right text-xs"></i>
+                </button>
+            </div>
+
+            <!-- COLUMN 2: RESULTS & CHART -->
+            <div class="col-span-12 md:col-span-5 bg-white/70 p-5 rounded-2xl shadow-xl flex flex-col overflow-hidden">
+                <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
+                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wide border-l-4 border-brand-500 pl-3">Summary & Analysis</h3>
+                    <div class="flex gap-2">
+                        <button onclick="downloadCalculationPDF()" class="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:text-red-500 flex items-center justify-center transition shadow-sm" title="Download Full PDF">
+                            <i class="fas fa-file-pdf"></i>
+                        </button>
+                        <button onclick="shareOnWhatsApp()" class="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 text-gray-500 hover:text-green-500 flex items-center justify-center transition shadow-sm" title="Share via WhatsApp">
+                            <i class="fab fa-whatsapp text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="calc-results-area" class="flex-grow flex flex-col gap-4 overflow-y-auto pr-2 custom-scrollbar">
+                    <div id="view-standard" class="flex flex-col gap-4">
+                        <!-- Hero Result Card -->
+                        <div class="bg-white p-4 rounded-xl shadow-md border border-gray-100 flex items-center justify-between">
+                            <div class="relative z-10">
+                                <p class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1" id="calc-primary-output-label">Monthly EMI</p>
+                                <h2 class="text-3xl font-black text-slate-800 tracking-tight" id="calc-primary-output-value">₹0</h2>
+                                <p class="text-xs text-brand-500 font-medium mt-1" id="calc-primary-output-words">Zero</p>
+                            </div>
+                            <div class="w-20 h-20 md:w-28 md:h-28 flex-shrink-0">
+                                <canvas id="calcLoanChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Detailed Breakdown -->
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div id="calc-results-grid" class="space-y-2 text-xs"></div>
+                        </div>
+
+                        <!-- Prepay Comparison Table -->
+                        <div id="prepay-comparison-table" class="hidden bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <h4 class="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3 border-b pb-2">Pre-Payment Options Comparison</h4>
+                            <div id="prepay-comparison-grid"></div>
+                        </div>
+
+                        <!-- AI Insight Box -->
+                        <div class="bg-brand-50/10 border border-brand-100 p-4 rounded-xl">
+                            <h4 class="text-xs font-bold text-brand-700 uppercase mb-3 flex items-center gap-2">
+                                <i class="fas fa-sparkles text-brand-500"></i> AI Insights
+                            </h4>
+                            <div id="calc-ai-insight-text" class="text-xs text-slate-600 leading-relaxed space-y-1"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-gray-100">
+                    <button class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-brand-500/30 transition flex items-center justify-center gap-2 text-sm group">
+                        Apply for this Loan <i class="fas fa-chevron-right text-xs group-hover:translate-x-1 transition-transform"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- COLUMN 3: AMORTIZATION SCHEDULE -->
+            <div class="col-span-12 md:col-span-4 bg-white p-4 rounded-2xl shadow-xl flex flex-col overflow-hidden">
+                 <div class="flex items-center justify-between pb-3 border-b border-gray-100 mb-2">
+                    <span class="text-sm font-bold text-gray-500 uppercase tracking-wide">Repayment Schedule</span>
+                    <div class="flex items-center gap-2">
+                        <div class="flex bg-gray-100 rounded-lg p-0.5 shadow-sm">
+                            <button onclick="setAmortView('yearly')" id="btn-view-yearly" class="px-2 py-0.5 text-[9px] font-bold rounded bg-brand-100 text-brand-700 transition">Yearly</button>
+                            <button onclick="setAmortView('monthly')" id="btn-view-monthly" class="px-2 py-0.5 text-[9px] font-bold rounded text-gray-500 hover:bg-gray-100 transition">Monthly</button>
+                        </div>
+                         <span class="w-px h-4 bg-gray-300"></span>
+                        <button onclick="downloadAmortizationPDFOnly(event)" class="text-gray-400 hover:text-red-500 transition" title="Download Schedule PDF">
+                            <i class="fas fa-download text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="amortization-container" class="flex-grow overflow-y-auto custom-scrollbar">
+                    <table class="w-full text-[10px] text-left">
+                        <thead class="sticky top-0 bg-white/95 backdrop-blur-sm text-gray-500 font-semibold uppercase tracking-wider shadow-sm z-10 border-b border-gray-100">
+                            <tr>
+                                <th class="py-2 px-3">Period</th>
+                                <th class="py-2 px-3 text-right">Opening</th>
+                                <th class="py-2 px-3 text-right">EMI</th>
+                                <th class="py-2 px-3 text-right">Principal</th>
+                                <th class="py-2 px-3 text-right">Interest</th>
+                                <th class="py-2 px-3 text-right">Closing</th>
+                            </tr>
+                        </thead>
+                        <tbody id="amortization-body" class="text-gray-600 divide-y divide-gray-50"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        let calcMode = 'emi';
+        let calcType = 'personal';
+        let chartInstance = null;
+        let currentAmortData = [];
+        let prepayData = {}; 
+        let amortView = 'yearly';
+
+        const defaults = {
+            personal: { amount: 1000000, rate: 9.99, tenure: 6, maxTenure: 9 }, 
+            home: { amount: 3000000, rate: 7.5, tenure: 20, maxTenure: 30 },
+            business: { amount: 2500000, rate: 13.0, tenure: 3, maxTenure: 7 }
+        };
+
+        const state = {
+            amount: 1000000, rate: 9.99, tenure: 6, income: 60000,
+            currentBalance: 1500000, currentRate: 11.5, newRate: 9.99, remTenure: 6,
+            origAmount: 2000000, origTenure: 15, prepayAmt: 200000, paidEmis: 24
+        };
+
+        function numToWords(n) {
+            if (!n || n === 0) return "";
+            n = Math.round(n);
+            const units = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
+            const teens = ["Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+            const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+            function convert(num) {
+                if (num < 10) return units[num];
+                if (num < 20) return teens[num - 10];
+                if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 !== 0 ? " " + convert(num % 10) : "");
+                if (num < 1000) return units[Math.floor(num / 100)] + " Hundred" + (num % 100 !== 0 ? " " + convert(num % 100) : "");
+                return "";
+            }
+            let str = "";
+            if (n >= 10000000) { str += convert(Math.floor(n / 10000000)) + " Crore "; n %= 10000000; }
+            if (n >= 100000) { str += convert(Math.floor(n / 100000)) + " Lakh "; n %= 100000; }
+            if (n >= 1000) { str += convert(Math.floor(n / 1000)) + " Thousand "; n %= 1000; }
+            if (n > 0) { str += convert(n); }
+            return str.trim() + " Rupees";
+        }
+
+        function initSmartLoanCalculator() {
+            handleCalcLoanTypeChange('personal');
+        }
+
+        function switchCalcMode(mode) {
+            calcMode = mode;
+            ['emi', 'bt', 'prepay'].forEach(m => {
+                const btn = document.getElementById(`calc-tab-${m}`);
+                btn.className = m === mode 
+                    ? 'flex-1 py-1.5 px-4 rounded-md text-xs font-bold transition-all bg-white text-brand-600 shadow-sm whitespace-nowrap'
+                    : 'flex-1 py-1.5 px-4 rounded-md text-xs font-bold transition-all text-gray-500 hover:text-gray-700 hover:bg-gray-50 whitespace-nowrap';
+            });
+
+            const calcBtnText = document.getElementById('calculate-btn-text');
+            const prepayTable = document.getElementById('prepay-comparison-table');
+            if (prepayTable) prepayTable.classList.add('hidden');
+
+            if (mode === 'prepay') {
+                state.origAmount = 1000000; state.origTenure = 6; state.paidEmis = 12; state.prepayAmt = 200000; state.rate = 9.99;
+                calcBtnText.innerText = "Calculate Savings"; 
+            } else if (mode === 'bt') {
+                state.currentBalance = 1500000; state.remTenure = 6; state.currentRate = 11.50; state.newRate = 9.99;
+                calcBtnText.innerText = "Calculate";
+            } else {
+                const defs = defaults[calcType];
+                state.amount = defs.amount; state.rate = defs.rate; state.tenure = defs.tenure;
+                calcBtnText.innerText = "Calculate";
+            }
+
+            renderInputs();
+            calculate();
+        }
+
+        function handleCalcLoanTypeChange(type) {
+            calcType = type;
+            document.querySelectorAll('input[name="calcLoanType"]').forEach(input => {
+                const div = input.nextElementSibling;
+                if (input.value === type) {
+                    div.classList.add('bg-brand-600', 'text-white', 'border-brand-600');
+                    div.classList.remove('bg-white', 'text-gray-500', 'border-gray-200');
+                } else {
+                    div.classList.remove('bg-brand-600', 'text-white', 'border-brand-600');
+                    div.classList.add('bg-white', 'text-gray-500', 'border-gray-200');
+                }
+            });
+
+            if (calcMode === 'emi') {
+                state.amount = defaults[type].amount;
+                state.rate = defaults[type].rate;
+                state.tenure = defaults[type].tenure;
+            }
+            renderInputs();
+            calculate();
+        }
+
+        function renderInputs() {
+            const container = document.getElementById('calc-input-container');
+            container.innerHTML = '';
+            const maxT = defaults[calcType].maxTenure;
+
+            if (calcMode === 'emi') {
+                addSlider(container, 'Loan Amount', 'amount', state.amount, 50000, 10000000, 10000, '₹', true);
+                addSlider(container, 'Interest Rate', 'rate', state.rate, 1, 25, 0.1, '%');
+                addSlider(container, 'Loan Tenure', 'tenure', state.tenure, 1, maxT, 1, 'Years');
+                addSlider(container, 'Net Monthly Income', 'income', state.income, 10000, 1000000, 5000, '₹', true);
+            } else if (calcMode === 'bt') {
+                addSlider(container, 'Outstanding Balance', 'currentBalance', state.currentBalance, 10000, 5000000, 10000, '₹', true);
+                addSlider(container, 'Remaining Tenure', 'remTenure', state.remTenure, 1, maxT, 0.5, 'Years');
+                addSlider(container, 'Current Rate', 'currentRate', state.currentRate, 5, 25, 0.1, '%');
+                addSlider(container, 'New Rate', 'newRate', state.newRate, 5, 25, 0.1, '%');
+            } else if (calcMode === 'prepay') {
+                addSlider(container, 'Original Loan', 'origAmount', state.origAmount, 100000, 10000000, 10000, '₹', true);
+                addSlider(container, 'Interest Rate', 'rate', state.rate, 1, 20, 0.1, '%');
+                addSlider(container, 'Original Tenure', 'origTenure', state.origTenure, 1, maxT, 1, 'Years');
+                addSlider(container, 'EMIs Paid', 'paidEmis', state.paidEmis, 1, 120, 1, 'Months');
+                addSlider(container, 'Prepayment Amount', 'prepayAmt', state.prepayAmt, 5000, 5000000, 5000, '₹', true);
+            }
+        }
+
+        function addSlider(parent, label, key, val, min, max, step, suffix, showWords = false) {
+            const div = document.createElement('div');
+            div.className = "flex flex-col gap-1";
+            const wordsHtml = showWords ? `<div id="words-${key}" class="text-[9px] text-brand-600 font-medium h-3 truncate text-right"></div>` : '';
+
+            div.innerHTML = `
+                <div class="flex justify-between items-end">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tight">${label}</label>
+                    <div class="flex flex-col items-end">
+                        <input type="text" value="${formatVal(val, suffix)}" 
+                            class="text-right text-base font-bold text-slate-800 bg-transparent border-none p-0 focus:ring-0 w-24 outline-none"
+                            onchange="updateVal('${key}', this.value, '${suffix}')">
+                    </div>
+                </div>
+                <input type="range" min="${min}" max="${max}" step="${step}" value="${val}"
+                    class="w-full accent-brand-600"
+                    oninput="updateSlider('${key}', this.value, '${suffix}', ${showWords})">
+                ${wordsHtml}
+            `;
+            parent.appendChild(div);
+            if(showWords) {
+                const w = div.querySelector(`#words-${key}`);
+                if(w) w.innerText = numToWords(val);
+            }
+        }
+
+        function updateSlider(key, val, suffix, showWords) {
+            state[key] = parseFloat(val);
+            const container = document.querySelector(`input[oninput="updateSlider('${key}', this.value, '${suffix}', ${showWords})"]`).parentNode;
+            const input = container.querySelector('input[type="text"]');
+            input.value = formatVal(state[key], suffix);
+            if(showWords) {
+                const w = container.querySelector(`#words-${key}`);
+                if(w) w.innerText = numToWords(state[key]);
+            }
+            calculate();
+        }
+
+        function updateVal(key, val, suffix) {
+            let num = parseFloat(val.replace(/[^0-9.]/g, ''));
+            if(isNaN(num)) num = 0;
+            if(['tenure', 'origTenure', 'remTenure'].includes(key)) {
+                const max = defaults[calcType].maxTenure;
+                if(num > max) num = max;
+            }
+            state[key] = num;
+            renderInputs(); calculate();
+        }
+
+        function formatVal(val, suffix) {
+            if (suffix === '%') return `${val}%`;
+            if (['Years', 'Months'].includes(suffix)) return `${val} ${suffix}`;
+            return `₹${val.toLocaleString('en-IN')}`;
+        }
+
+        function calculate() {
+            const prepayTable = document.getElementById('prepay-comparison-table');
+            if (prepayTable) prepayTable.classList.add('hidden');
+            if (calcMode === 'emi') doEMI();
+            else if (calcMode === 'bt') doBT();
+            else if (calcMode === 'prepay') doPrepay();
+        }
+
+        function doEMI() {
+            const { amount, rate, tenure, income } = state;
+            const r = rate / 12 / 100;
+            const n = tenure * 12;
+            const emi = (amount * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+            const totalAmt = emi * n;
+            const totalInt = totalAmt - amount;
+
+            renderResults('Monthly EMI', emi, [
+                { l: 'Principal Amount', v: Math.round(amount) },
+                { l: 'Total Interest', v: Math.round(totalInt), c: 'text-orange-500 font-semibold' },
+                { l: 'Total Payment', v: Math.round(totalAmt), c: 'font-bold' }
+            ]);
+            renderChart([amount, totalInt], ['Principal', 'Interest']);
+            
+            const insightText = document.getElementById('calc-ai-insight-text');
+            if(insightText) {
+                const dti = income > 0 ? (emi / income) * 100 : 0;
+                const isSafe = dti <= 42;
+                const ratio = Math.round((totalInt / totalAmt) * 100);
+                const intPerLakh = Math.round((totalInt / amount) * 100000);
+                
+                insightText.innerHTML = `
+                    <ul class="list-none space-y-2 text-xs">
+                        <li class="${isSafe ? 'text-green-700' : 'text-red-600'}">
+                            <strong>Budget Check (42% Rule):</strong> Your EMI consumes <strong>${dti.toFixed(1)}%</strong> of your income. 
+                            ${isSafe ? `<span class="text-green-700">Safe!</span>` : `<span class="text-red-600">Caution! Exceeds the recommended debt-to-income ratio.</span>`}
+                        </li>
+                        <li><i class="fas fa-coins text-brand-500 mr-1"></i> <strong>Interest Burden:</strong> For every ₹1 Lakh you borrow, you will pay approx. <strong class="text-slate-800">${intPerLakh.toLocaleString('en-IN')}</strong> in interest.</li>
+                        <li><i class="fas fa-chart-line text-orange-600 mr-1"></i> <strong>Ratio Analysis:</strong> Interest makes up <strong class="text-orange-600">${ratio}%</strong> of your total repayment amount.</li>
+                        <li class="pt-2 mt-2 border-t border-brand-100">
+                             <div class="text-[10px] font-bold text-brand-600 uppercase tracking-tight mb-1"><i class="fas fa-lightbulb"></i> Pro Tips</div>
+                             <p class="text-slate-500 leading-relaxed italic">• Opt for a tenure where the total interest cost doesn't exceed 25% of the principal amount.</p>
+                        </li>
+                    </ul>`;
+            }
+            genAmort(amount, r, n, emi);
+        }
+
+        function doBT() {
+            const { currentBalance, currentRate, newRate, remTenure } = state;
+            const n = remTenure * 12;
+            const r1 = currentRate / 12 / 100;
+            const r2 = newRate / 12 / 100;
+            const oldEMI = (currentBalance * r1 * Math.pow(1+r1, n)) / (Math.pow(1+r1, n)-1);
+            const newEMI = (currentBalance * r2 * Math.pow(1+r2, n)) / (Math.pow(1+r2, n)-1);
+            const totalOldCost = oldEMI * n;
+            const totalNewCost = newEMI * n;
+            const savings = totalOldCost - totalNewCost;
+            const monthlySave = oldEMI - newEMI;
+            const estimatedFee = currentBalance * 0.01;
+            const netGain = savings - estimatedFee;
+            const costReductionRatio = (savings / totalOldCost) * 100;
+
+            renderResults('Total Savings', savings, [
+                { l: 'Current EMI', v: Math.round(oldEMI) },
+                { l: 'New EMI', v: Math.round(newEMI), c: 'text-green-600 font-bold' },
+                { l: 'Monthly Benefit', v: Math.round(oldEMI - newEMI) }
+            ]);
+            renderChart([totalNewCost, savings], ['New Cost', 'Savings'], ['#cbd5e1', '#10b981']);
+
+            const insightText = document.getElementById('calc-ai-insight-text');
+            if(insightText) {
+                if (savings > 0) {
+                    insightText.innerHTML = `
+                        <ul class="list-none space-y-2 text-xs">
+                            <li class="text-green-700"><i class="fas fa-check-circle mr-1"></i> <strong>Switch Recommended:</strong> You save <strong class="text-green-700">${Math.round(savings).toLocaleString('en-IN')}</strong> over ${remTenure} years.</li>
+                            <li><i class="fas fa-wallet text-slate-800 mr-1"></i> <strong>Cash Flow Boost:</strong> Free up <strong class="text-slate-800">${Math.round(monthlySave).toLocaleString()}</strong> monthly.</li>
+                            <li class="pt-1 border-t border-yellow-100 text-gray-700"><i class="fas fa-exclamation-triangle text-yellow-600 mr-1"></i> <strong>Net Benefit:</strong> After ~1% fee, net profit is <strong class="text-green-700">${Math.round(netGain).toLocaleString()}</strong>.</li>
+                            <li class="pt-2 mt-2 border-t border-brand-100">
+                                <div class="text-[10px] font-bold text-brand-600 uppercase tracking-tight mb-1"><i class="fas fa-lightbulb"></i> Pro Tips</div>
+                                <p class="text-slate-500 leading-relaxed italic">• Check if the new lender offers 'Smart' features like overdraft or linked accounts which can save more interest.</p>
+                                <p class="text-slate-500 leading-relaxed italic">• Always negotiate for a waiver on processing fees; many banks waive this during festive seasons or for high credit scores.</p>
+                            </li>
+                        </ul>`;
+                } else {
+                    insightText.innerHTML = `<p class="text-red-500 font-medium text-sm p-4 rounded-lg bg-red-50 border border-red-200"><i class="fas fa-times-circle mr-1"></i> No transfer benefit detected with current rates.</p>`;
+                }
+            }
+            genAmort(currentBalance, r2, n, newEMI);
+        }
+
+        function doPrepay() {
+            const { origAmount, rate, origTenure, paidEmis, prepayAmt } = state;
+            const r = rate / 12 / 100;
+            const n = origTenure * 12;
+            const emi = (origAmount * r * Math.pow(1+r, n)) / (Math.pow(1+r, n)-1);
+            let bal = origAmount;
+            for(let i=0; i<paidEmis; i++) bal = bal - (emi - (bal*r));
+            if(bal < 0) bal = 0;
+            let newBal = bal - prepayAmt;
+            if(newBal < 0) newBal = 0;
+
+            const remMonthsOrig = Math.max(0, n - paidEmis);
+            const totalPayOrig = emi * remMonthsOrig;
+            const totalIntOrig = totalPayOrig - bal;
+
+            let monthsA = 0, tempA = newBal;
+            while(tempA > 0 && monthsA < 600) { tempA = tempA - (emi - (tempA*r)); monthsA++; }
+            const totalPayA = emi * monthsA;
+            const totalIntA = totalPayA - newBal;
+            const netSavingA = totalPayOrig - (totalPayA + prepayAmt);
+
+            let newEMIB = remMonthsOrig > 0 ? (newBal * r * Math.pow(1+r, remMonthsOrig)) / (Math.pow(1+r, remMonthsOrig)-1) : 0;
+            const totalPayB = newEMIB * remMonthsOrig;
+            const totalIntB = totalPayB - newBal;
+            const netSavingB = totalPayOrig - (totalPayB + prepayAmt);
+
+            prepayData = {
+                orig: { int: totalIntOrig, tenure: remMonthsOrig, emi: emi, total: totalPayOrig },
+                optA: { int: totalIntA, save: totalIntOrig - totalIntA, tenure: monthsA, emi: emi, total: totalPayA + prepayAmt, totalSave: netSavingA },
+                optB: { int: totalIntB, save: totalIntOrig - totalIntB, emi: newEMIB, tenure: remMonthsOrig, total: totalPayB + prepayAmt, totalSave: netSavingB }
+            };
+
+            const isTenureBetter = prepayData.optA.totalSave > prepayData.optB.totalSave;
+            const maxSaving = Math.max(prepayData.optA.totalSave, prepayData.optB.totalSave);
+            const maxIntSaved = Math.max(prepayData.optA.save, prepayData.optB.save);
+            const efficiencyScore = prepayAmt > 0 ? (maxIntSaved / prepayAmt) * 100 : 0;
+
+            renderResults('Total Net Saving', maxSaving, [
+                { l: 'Original Remaining Balance', v: Math.round(bal) },
+                { l: 'Prepayment Amount', v: Math.round(prepayAmt), c: 'text-brand-600 font-bold' },
+                { l: 'Max Interest Saved', v: Math.round(maxIntSaved), c: 'text-green-600 font-bold' }
+            ]);
+
+            renderChart([prepayData.orig.total, prepayData.optA.total, prepayData.optB.total], ['Current', 'Option A', 'Option B'], ['#ef4444', '#2b80ff', '#22c55e']);
+            renderPrepayComparisonTable(prepayData);
+            
+            const aiText = document.getElementById('calc-ai-insight-text');
+            if(aiText) {
+                aiText.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="text-brand-700 font-bold text-xs flex items-center gap-1">
+                            <i class="fas fa-check-square"></i> RECOMMENDED: ${isTenureBetter ? 'Reduce Tenure (Option A)' : 'Reduce EMI (Option B)'}
+                        </div>
+                        <p class="text-xs text-gray-600 leading-relaxed">
+                            Net saving of <strong class="text-green-700">${Math.round(maxSaving).toLocaleString('en-IN')}</strong> achieved.
+                        </p>
+                        <ul class="text-xs text-gray-600 space-y-1 ml-1 leading-relaxed border-t border-gray-50 pt-1">
+                            <li>• <strong class="text-brand-600">Time Advantage:</strong> Option A makes you debt-free <strong class="text-brand-600">${((remMonthsOrig - prepayData.optA.tenure)/12).toFixed(1)} years faster</strong>.</li>
+                            <li>• <strong class="text-orange-600">ROI Analysis:</strong> Interest saving is <strong class="text-orange-600">${efficiencyScore.toFixed(1)}%</strong> of prepayment.</li>
+                        </ul>
+                        <div class="pt-2 mt-2 border-t border-brand-100">
+                             <div class="text-[10px] font-bold text-brand-600 uppercase tracking-tight mb-1"><i class="fas fa-lightbulb"></i> Pro Tips</div>
+                             <p class="text-slate-500 text-xs leading-relaxed italic">• Prepay during the first 1/3rd of your loan tenure to maximize interest savings (front-loaded interest benefit).</p>
+                             <p class="text-slate-500 text-xs leading-relaxed italic">• Choose 'Reduce Tenure' for higher savings, or 'Reduce EMI' if you need more monthly cash flow for other investments.</p>
+                        </div>
+                    </div>`;
+            }
+            genAmort(newBal, r, monthsA, emi);
+        }
+
+        function renderPrepayComparisonTable(data) {
+            const tableEl = document.getElementById('prepay-comparison-table');
+            const gridEl = document.getElementById('prepay-comparison-grid');
+            tableEl.classList.remove('hidden');
+            gridEl.innerHTML = `
+                <table class="w-full text-[10px] text-left">
+                    <thead class="text-gray-500 font-semibold uppercase tracking-wider border-b border-gray-100">
+                        <tr><th class="py-2 px-1">Metric</th><th class="py-2 px-1 text-center text-red-500">Current</th><th class="py-2 px-1 text-center text-brand-600">Option A</th><th class="py-2 px-1 text-center text-green-600">Option B</th></tr>
+                    </thead>
+                    <tbody class="text-gray-600 divide-y divide-gray-50">
+                        <tr><td class="py-2 px-1 font-bold">New EMI</td><td class="text-center">${Math.round(data.orig.emi).toLocaleString()}</td><td class="text-center font-bold text-brand-600">${Math.round(data.optA.emi).toLocaleString()}</td><td class="text-center font-bold text-green-700">${Math.round(data.optB.emi).toLocaleString()}</td></tr>
+                        <tr><td class="py-2 px-1 font-bold">Tenure</td><td class="text-center">${data.orig.tenure} Mon</td><td class="text-center font-black text-brand-600">${data.optA.tenure} Mon</td><td class="text-center">${data.optB.tenure} Mon</td></tr>
+                        <tr><td class="py-2 px-1 font-bold">Net Saving</td><td class="text-center">-</td><td class="text-center font-black text-green-700">${Math.round(data.optA.totalSave).toLocaleString()}</td><td class="text-center font-black text-green-700">${Math.round(data.optB.totalSave).toLocaleString()}</td></tr>
+                    </tbody>
+                </table>`;
+        }
+
+        function renderResults(mainLabel, mainVal, details) {
+            document.getElementById('calc-primary-output-label').innerText = mainLabel;
+            document.getElementById('calc-primary-output-value').innerText = `₹${Math.round(mainVal).toLocaleString('en-IN')}`;
+            document.getElementById('calc-primary-output-words').innerText = numToWords(Math.round(mainVal));
+            document.getElementById('calc-results-grid').innerHTML = details.map(d => `
+                <div class="flex justify-between items-center border-b border-gray-50 pb-1.5 last:border-0 last:pb-0">
+                    <span class="text-gray-500 font-medium">${d.l}</span>
+                    <span class="font-bold text-slate-800 ${d.c || ''}">${typeof d.v === 'number' ? d.v.toLocaleString('en-IN') : d.v}</span>
+                </div>`).join('');
+        }
+
+        function renderChart(data, labels, colors = ['#2b80ff', '#f97316']) {
+            const ctx = document.getElementById('calcLoanChart').getContext('2d');
+            if(chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0, hoverOffset: 4 }] },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '80%', plugins: { legend: { display: false } } }
+            });
+        }
+
+        function genAmort(P, r, n, emi) {
+            currentAmortData = [];
+            let bal = P;
+            for(let i=1; i<=n; i++) {
+                if(bal <= 0) break;
+                const int = bal * r;
+                let prin = Math.min(bal, emi - int);
+                currentAmortData.push({ i, open: bal, emi, prin, int, close: bal - prin });
+                bal -= prin;
+            }
+            renderAmortTable();
+        }
+
+        function setAmortView(view) {
+            amortView = view;
+            document.getElementById('btn-view-yearly').className = view === 'yearly' ? 'px-2 py-0.5 text-[9px] font-bold rounded bg-brand-100 text-brand-700 transition' : 'px-2 py-0.5 text-[9px] font-bold rounded text-gray-500 hover:bg-gray-100 transition';
+            document.getElementById('btn-view-monthly').className = view === 'monthly' ? 'px-2 py-0.5 text-[9px] font-bold rounded bg-brand-100 text-brand-700 transition' : 'px-2 py-0.5 text-[9px] font-bold rounded text-gray-500 hover:bg-gray-100 transition';
+            renderAmortTable();
+        }
+
+        function renderAmortTable() {
+            const tbody = document.getElementById('amortization-body');
+            tbody.innerHTML = '';
+            let dataToShow = [];
+            if(amortView === 'yearly') {
+                const map = {};
+                currentAmortData.forEach(r => {
+                    const y = Math.ceil(r.i/12);
+                    if(!map[y]) map[y] = { i: `Year ${y}`, open: r.open, emi:0, prin:0, int:0, close: r.close };
+                    map[y].emi += r.emi; map[y].prin += r.prin; map[y].int += r.int; map[y].close = r.close;
+                });
+                dataToShow = Object.values(map);
+            } else dataToShow = currentAmortData.map(d => ({ ...d, i: `Month ${d.i}` }));
+
+            dataToShow.forEach(row => {
+                tbody.innerHTML += `<tr class="hover:bg-brand-50 transition-colors group">
+                    <td class="py-2 px-3 text-slate-800 font-medium">${row.i}</td>
+                    <td class="py-2 px-3 text-right text-gray-500">${Math.round(row.open).toLocaleString()}</td>
+                    <td class="py-2 px-3 text-right font-medium">${Math.round(row.emi).toLocaleString()}</td>
+                    <td class="py-2 px-3 text-right text-brand-600 font-bold">${Math.round(row.prin).toLocaleString()}</td>
+                    <td class="py-2 px-3 text-right text-orange-500">${Math.round(row.int).toLocaleString()}</td>
+                    <td class="py-2 px-3 text-right font-bold">${Math.round(row.close).toLocaleString()}</td>
+                </tr>`;
+            });
+        }
+
+        function addWatermarkToPDF(doc) {
+            const pageCount = doc.internal.getNumberOfPages();
+            for(let i=1; i<=pageCount; i++) {
+                doc.setPage(i);
+                doc.setGState(new doc.GState({ opacity: 0.15 }));
+                doc.setFontSize(60); doc.setTextColor(50, 50, 50); doc.setFont(undefined, 'bold');
+                doc.text("CASHMELA.COM", 105, 150, { align: 'center', angle: 30 }); 
+                doc.setGState(new doc.GState({ opacity: 1 }));
+                doc.setFontSize(8); doc.setTextColor(150); doc.text("CashMela - India's Trusted Loan Advisor | www.cashmela.com", 105, 285, { align: 'center' });
+            }
+        }
+
+        async function downloadAmortizationPDFOnly(event) {
+            event.stopPropagation();
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFillColor(43, 128, 255); doc.rect(0, 0, 210, 20, 'F');
+            doc.setTextColor(255, 255, 255); doc.setFontSize(18); doc.setFont(undefined, 'bold');
+            doc.text('CashMela', 15, 13);
+            doc.setTextColor(0,0,0); doc.setFontSize(10);
+            doc.text(calcMode === 'prepay' ? 'Revised Repayment Schedule' : 'Repayment Schedule', 15, 30);
+            
+            const tableData = currentAmortData.map(r => [`Month ${r.i}`, Math.round(r.open).toLocaleString(), Math.round(r.emi).toLocaleString(), Math.round(r.prin).toLocaleString(), Math.round(r.int).toLocaleString(), Math.round(r.close).toLocaleString()]);
+            doc.autoTable({ startY: 35, head: [['Period', 'Opening', 'EMI', 'Principal', 'Interest', 'Closing']], body: tableData, theme: 'grid', headStyles: { fillColor: [43, 128, 255] }, styles: { fontSize: 8 }, columnStyles: { 0: { halign: 'left' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } } });
+            addWatermarkToPDF(doc);
+            doc.save(`Financial_Amortization_${new Date().toLocaleDateString()}.pdf`);
+        }
+
+        async function downloadCalculationPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFillColor(43, 128, 255); doc.rect(0, 0, 210, 30, 'F');
+            doc.setTextColor(255, 255, 255); doc.setFontSize(18); doc.setFont(undefined, 'bold');
+            doc.text('CashMela', 15, 15);
+            doc.setTextColor(0, 0, 0); doc.setFontSize(12); doc.text(`${calcMode.toUpperCase()} Analysis`, 15, 40);
+            doc.setFontSize(10); doc.text(`Date: ${new Date().toLocaleDateString()}`, 160, 40);
+
+            let y = 50;
+            if(calcMode === 'prepay' && prepayData.orig) {
+                doc.setFont(undefined, 'bold'); doc.text("Strategic Comparison", 15, y);
+                try { const img = document.getElementById('calcLoanChart').toDataURL('image/png'); doc.addImage(img, 'PNG', 150, y-10, 40, 40); } catch(e) {}
+                y += 8;
+                doc.autoTable({ startY: y, head: [['Metric', 'Current', 'Option A (Time)', 'Option B (EMI)']], body: [['Monthly EMI', Math.round(prepayData.orig.emi).toLocaleString(), Math.round(prepayData.optA.emi).toLocaleString(), Math.round(prepayData.optB.emi).toLocaleString()],['Tenure', `${prepayData.orig.tenure} Mon`, `${prepayData.optA.tenure} Mon`, `${prepayData.optB.tenure} Mon`],['Int. Saved', '-', Math.round(prepayData.optA.save).toLocaleString(), Math.round(prepayData.optB.save).toLocaleString()],['Net Saving', '-', Math.round(prepayData.optA.totalSave).toLocaleString(), Math.round(prepayData.optB.totalSave).toLocaleString()]], theme: 'grid', headStyles: { fillColor: [50, 50, 50] }, styles: { fontSize: 9 } });
+                y = doc.lastAutoTable.finalY + 15;
+            } else {
+                const mainLabel = document.getElementById('calc-primary-output-label').innerText;
+                const mainVal = document.getElementById('calc-primary-output-value').innerText.replace('₹', '').trim();
+                doc.text(`${mainLabel}: ${mainVal}`, 15, y); y += 15;
+            }
+
+            doc.setFont(undefined, 'bold'); doc.text('Repayment Summary', 15, y); y += 6;
+            const amortDisplay = amortView === 'yearly' && calcMode !== 'prepay' ? Object.values(currentAmortData.reduce((acc, r) => { const y=Math.ceil(r.i/12); if(!acc[y]) acc[y]={i:`Year ${y}`,open:r.open,emi:0,prin:0,int:0,close:r.close}; acc[y].emi+=r.emi; acc[y].prin+=r.prin; acc[y].int+=r.int; acc[y].close=r.close; return acc; }, {})) : currentAmortData.map(d=>({...d, i:`Month ${d.i}`}));
+            doc.autoTable({ startY: y, head: [['Period', 'Opening', 'EMI', 'Principal', 'Interest', 'Closing']], body: amortDisplay.map(r=>[r.i, Math.round(r.open).toLocaleString(), Math.round(r.emi).toLocaleString(), Math.round(r.prin).toLocaleString(), Math.round(r.int).toLocaleString(), Math.round(r.close).toLocaleString()]), theme: 'grid', headStyles: { fillColor: [43, 128, 255] }, styles: { fontSize: 8 } });
+            addWatermarkToPDF(doc);
+            doc.save(`Financial_Report_${new Date().toLocaleDateString()}.pdf`);
+        }
+
+        function shareOnWhatsApp() {
+            const val = document.getElementById('calc-primary-output-value').innerText;
+            const text = calcMode === 'prepay' ? `I just calculated my loan prepayment on CashMela. Total Net Saving: ₹${Math.round(Math.max(prepayData.optA.totalSave, prepayData.optB.totalSave)).toLocaleString()}!` : `Check my loan calculation on CashMela. Result: ${val}.`;
+            const box = document.createElement('div');
+            box.className = 'fixed inset-0 bg-gray-900/75 flex items-center justify-center z-[100]';
+            box.innerHTML = `<div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm mx-4 text-center"><i class="fab fa-whatsapp text-4xl text-green-500 mb-3"></i><h5 class="text-lg font-bold mb-2">Summary Copied!</h5><textarea class="w-full text-xs p-2 border rounded-lg bg-gray-50 mb-4 h-24 resize-none">${text}</textarea><div class="flex justify-center gap-3"><button onclick="document.body.removeChild(this.closest('.fixed'))" class="bg-gray-200 py-2 px-4 rounded-lg text-sm">Close</button><button onclick="window.open('https://wa.me/?text=${encodeURIComponent(text)}', '_blank')" class="bg-green-600 text-white py-2 px-4 rounded-lg text-sm">Open WhatsApp</button></div></div>`;
+            document.body.appendChild(box); navigator.clipboard.writeText(text);
+        }
+
+        document.addEventListener('DOMContentLoaded', initSmartLoanCalculator);
+    </script>
+</body>
+</html>
